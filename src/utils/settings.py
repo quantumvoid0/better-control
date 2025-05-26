@@ -17,7 +17,7 @@ def ensure_config_dir(logging: Logger) -> None:
     try:
         logging.log(LogLevel.Info, f"Ensuring config directory exists at {CONFIG_PATH}")
         os.makedirs(CONFIG_PATH, exist_ok=True)
-        logging.log(LogLevel.Info, f"Config directory check complete")
+        logging.log(LogLevel.Info, "Config directory check complete")
     except Exception as e:
         logging.log(LogLevel.Error, f"Error creating config directory: {e}")
 
@@ -44,18 +44,18 @@ def load_settings(logging: Logger) -> dict:
                 content = '{' + content  # Fix malformed JSON
             settings = json.loads(content)
             logging.log(LogLevel.Info, f"Loaded settings from {SETTINGS_FILE}")
-            
+
         if not isinstance(settings, dict):
             logging.log(LogLevel.Warn, "Invalid settings format - using defaults")
             return default_settings
-            
+
         for key in default_settings:
             if key not in settings:
                 settings[key] = default_settings[key]
                 logging.log(LogLevel.Info, f"Added missing setting: {key}")
-                
+
         return settings
-        
+
     except Exception as e:
         logging.log(LogLevel.Error, f"Error loading settings: {e}")
         return default_settings
@@ -64,11 +64,11 @@ def save_settings(settings: dict, logging: Logger) -> bool:
     """Save settings to the settings file with atomic write and validation"""
     try:
         ensure_config_dir(logging)
-        
+
         if not isinstance(settings, dict):
             logging.log(LogLevel.Error, "Invalid settings - not a dictionary")
             return False
-            
+
         default_settings = {
             "visibility": {},
             "positions": {},
@@ -84,15 +84,15 @@ def save_settings(settings: dict, logging: Logger) -> bool:
         temp_path = SETTINGS_FILE + '.tmp'
         with open(temp_path, 'w') as f:
             json.dump(settings, f, indent=4)
-        
+
 
         with open(temp_path, 'r') as f:
-            json.load(f) 
-            
+            json.load(f)
+
         os.replace(temp_path, SETTINGS_FILE)
         logging.log(LogLevel.Info, f"Settings saved successfully to {SETTINGS_FILE}")
         return True
-        
+
     except Exception as e:
         logging.log(LogLevel.Error, f"Error saving settings: {e}")
         try:
