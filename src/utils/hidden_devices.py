@@ -1,7 +1,6 @@
 import json
 import os
 import tempfile
-from utils.logger import LogLevel, Logger
 
 CONFIG_DIR = os.path.join(
     os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")),
@@ -47,11 +46,11 @@ class DeviceStorage:
             temp_path = tempfile.mktemp(dir=CONFIG_DIR)
             with open(temp_path, 'w') as f:
                 json.dump(list(self.devices), f)
-            
+
             # Verify the file is valid
             with open(temp_path, 'r') as f:
                 json.load(f)
-            
+
             # Atomic replace
             os.replace(temp_path, self.storage_file)
             return True
@@ -77,7 +76,7 @@ class DeviceStorage:
     def contains(self, device_id: str) -> bool:
         """Check if device exists"""
         return device_id in self.devices
-        
+
     def __iter__(self):
         """Allow iteration over device IDs"""
         return iter(self.devices)
@@ -106,7 +105,7 @@ class PermanentDevices(DeviceStorage):
     def contains(self, device_id: str) -> bool:
         """Check if device is hidden"""
         return device_id in self.devices
-        
+
     def __iter__(self):
         """Allow iteration over hidden device IDs"""
         return iter(self.devices)
