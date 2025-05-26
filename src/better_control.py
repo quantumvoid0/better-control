@@ -27,32 +27,32 @@ def signal_handler(sig, frame):
     """Handle signals with comprehensive cleanup"""
     import traceback
     from utils.logger import emergency_log
-    
+
     emergency_log(f"Signal {sig} received", "".join(traceback.format_stack()))
-    
+
     # Clean up GTK objects in stages
     try:
         if Gtk.main_level() > 0:
             Gtk.main_quit()
-            
+
         # Explicitly destroy any remaining GTK objects
         for window in Gtk.Window.list_toplevels():
             try:
                 window.destroy()
             except:
                 pass
-                
+
         # Clean up GLib main loops
         while GLib.MainContext.default().iteration(False):
             pass
-            
+
     except Exception as e:
         emergency_log(f"Error during cleanup: {e}", "")
-    
+
     # Force garbage collection
     import gc
     gc.collect()
-    
+
     # Additional system-level cleanup
     if sig in (signal.SIGSEGV, signal.SIGABRT):
         emergency_log("Critical error occurred - generating core dump", "")
@@ -67,7 +67,7 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGSEGV, signal_handler)
     signal.signal(signal.SIGABRT, signal_handler)
-    
+
     # Initialize GTK safety net
     Gtk.init_check()
     if not Gtk.init_check()[0]:
@@ -173,11 +173,64 @@ def load_language_and_translations(arg_parser, logger):
     return lang, txt
 
 
-def launch_application(arg_parser, logger, txt):
-    import time
+def get_window_size(arg_parser, logger):
+    """Parse and return window size from arguments"""
+    if arg_parser.find_arg(("-s", "--size")):
+        optarg = arg_parser.option_arg(("-s", "--size"))
+        if optarg is None or 'x' not in optarg:
+            logger.log(LogLevel.Error, "Invalid window size")
+            sys.exit(1)
+        else:
+            return optarg.split('x')
+    else:
+        return [900, 600]
 
-    time.sleep(0.1)
 
+def setup_window_floating_rules(logger):
+    """Set up window floating rules for different window managers"""
+    xdg = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+    sway_sock = os.environ.get("SWAYSOCK", "").lower()
+
+    if "hyprland" in xdg:
+        try:
+            subprocess.run(
+                [
+                    "hyprctl",
+                    "keyword",
+                    "windowrule",
+                    "float,class:^(better_control.py)$",
+                ],
+                check=False,
+            )
+        except Exception as e:
+            logger.log(LogLevel.Warn, f"Failed to set hyprland window rule: {e}")
+    elif "sway" in sway_sock:
+        try:
+            subprocess.run(
+                [
+                    "swaymsg",
+                    "for_window",
+                    '[app_id="^better_control.py$"]',
+                    "floating",
+                    "enable",
+                ],
+                check=False,
+            )
+        except Exception as e:
+            logger.log(LogLevel.Warn, f"Failed to set sway window rule: {e}")
+
+
+def load_animations_async_worker(logger):
+    """Load animations CSS asynchronously"""
+    try:
+        load_animations_css()
+        logger.log(LogLevel.Info, "Loaded animations CSS asynchronously")
+    except Exception as e:
+        logger.log(LogLevel.Warn, f"Failed to load animations CSS asynchronously: {e}")
+
+
+def create_and_configure_window(arg_parser, logger, txt):
+    """Create and configure the main window"""
     logger.log(LogLevel.Info, "Creating main window")
     win = BetterControl(txt, arg_parser, logger)
     logger.log(LogLevel.Info, "Main window created successfully")
@@ -189,68 +242,25 @@ def launch_application(arg_parser, logger, txt):
 
     GLib.idle_add(run_audio_operation)
 
-    option: Any = []
-    if arg_parser.find_arg(("-s", "--size")):
-        optarg = arg_parser.option_arg(("-s", "--size"))
-        if optarg is None or 'x' not in optarg:
-            logger.log(LogLevel.Error, "Invalid window size")
-            sys.exit(1)
-        else:
-            option = optarg.split('x')
-    else:
-        option = [900, 600]
-
+    option = get_window_size(arg_parser, logger)
     win.set_default_size(int(option[0]), int(option[1]))
     win.resize(int(option[0]), int(option[1]))
     win.connect("destroy", Gtk.main_quit)
     win.show_all()
 
+    return win
+
+
+def start_background_tasks(logger):
+    """Start background tasks in separate threads"""
     import threading
 
-    def set_window_floating_rules():
-        xdg = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
-        sway_sock = os.environ.get("SWAYSOCK", "").lower()
+    threading.Thread(target=setup_window_floating_rules, args=(logger,), daemon=True).start()
+    threading.Thread(target=load_animations_async_worker, args=(logger,), daemon=True).start()
 
-        if "hyprland" in xdg:
-            try:
-                subprocess.run(
-                    [
-                        "hyprctl",
-                        "keyword",
-                        "windowrule",
-                        "float,class:^(better_control.py)$",
-                    ],
-                    check=False,
-                )
-            except Exception as e:
-                logger.log(LogLevel.Warn, f"Failed to set hyprland window rule: {e}")
-        elif "sway" in sway_sock:
-            try:
-                subprocess.run(
-                    [
-                        "swaymsg",
-                        "for_window",
-                        '[app_id="^better_control.py$"]',
-                        "floating",
-                        "enable",
-                    ],
-                    check=False,
-                )
-            except Exception as e:
-                logger.log(LogLevel.Warn, f"Failed to set sway window rule: {e}")
 
-    threading.Thread(target=set_window_floating_rules, daemon=True).start()
-
-    # Load animations CSS asynchronously after window is shown
-    def load_animations_async():
-        try:
-            load_animations_css()
-            logger.log(LogLevel.Info, "Loaded animations CSS asynchronously")
-        except Exception as e:
-            logger.log(LogLevel.Warn, f"Failed to load animations CSS asynchronously: {e}")
-
-    threading.Thread(target=load_animations_async, daemon=True).start()
-
+def run_gtk_main_loop(logger):
+    """Run the GTK main loop with error handling"""
     try:
         Gtk.main()
     except KeyboardInterrupt:
@@ -260,6 +270,16 @@ def launch_application(arg_parser, logger, txt):
     except Exception as e:
         logger.log(LogLevel.Error, f"Error in GTK main loop: {e}")
         sys.exit(1)
+
+
+def launch_application(arg_parser, logger, txt):
+    import time
+
+    time.sleep(0.1)
+
+    create_and_configure_window(arg_parser, logger, txt)
+    start_background_tasks(logger)
+    run_gtk_main_loop(logger)
 
 
 def parse_arguments():
@@ -334,8 +354,6 @@ def apply_environment_variables():
 
 
 def launch_main_window(arg_parser, logger, txt):
-    import time
-
     logger.log(LogLevel.Info, "Creating main window")
     win = BetterControl(txt, arg_parser, logger)
     logger.log(LogLevel.Info, "Main window created successfully")
