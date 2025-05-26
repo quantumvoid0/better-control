@@ -187,8 +187,8 @@ class ArgParse:
         # Logging options
         self.arg_print(f"{BOLD}{UNDERLINE}Logging:{RESET}")
         self.arg_print(f"  {MAGENTA}-l, --log{RESET} {YELLOW}<lvl/file>{RESET}            The program will either log to a file if given a file path,")
-        self.arg_print(f"                                  or output to stdout based on the log level if given")
-        self.arg_print(f"                                  a value between 0 and 3.")
+        self.arg_print("                                  or output to stdout based on the log level if given")
+        self.arg_print("                                  a value between 0 and 3.")
         self.arg_print(f"  {MAGENTA}-r, --redact{RESET}                    Redact sensitive information from logs\n")
 
         # Footer
