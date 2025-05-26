@@ -1,13 +1,11 @@
 import datetime
 from enum import Enum
-from io import TextIOWrapper
 import os
 import re
 import sys
-import traceback
 from sys import stderr, stdout
 import time
-from typing import Dict, List, Optional, Pattern, Tuple
+from typing import Dict, Optional
 
 CRASH_LOG_DIR = os.path.join(
     os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
@@ -55,7 +53,7 @@ class Logger:
         if arg_parser.find_arg(("-l", "--log")):
             log_info.first = True
             log_info.second = arg_parser.option_arg(("-l", "--log"))
-            
+
         # Check if redaction is enabled via --redact flag
         self.__should_redact: bool = arg_parser.find_arg(("-r", "--redact"))
 
@@ -85,35 +83,35 @@ class Logger:
                 "\x1b[1:37m[\x1b[1;33mWARNING\x1b[1;37m]:\x1b[0;0;0m", "[WARNING]:"
             ),
         }
-        
+
         # Define patterns for sensitive information to redact
         self.__redaction_patterns = [
             # WiFi network names/SSIDs
             (r'(Connecting to WiFi network: )([^\s]+)', r'\1[REDACTED-WIFI]'),
             (r'(Connected to )([^\s]+)( using saved connection)', r'\1[REDACTED-WIFI]\3'),
-            
+
             # Device identifiers and names (audio, bluetooth, etc.)
             (r'(Current active output sink: )(.*)', r'\1[REDACTED-DEVICE]'),
             (r'(Current active input source: )(.*)', r'\1[REDACTED-DEVICE]'),
             (r'(Adding output sink: )([^\(]+)(\(.*\))', r'\1[REDACTED-DEVICE-ID] \3'),
             (r'(Adding input source: )([^\(]+)(\(.*\))', r'\1[REDACTED-DEVICE-ID] \3'),
-            
+
             # User and machine identifiers
             (r'(application\.process\.user = ")[^"]+(\")', r'\1[REDACTED-USER]\2'),
             (r'(application\.process\.host = ")[^"]+(\")', r'\1[REDACTED-HOSTNAME]\2'),
             (r'(application\.process\.machine_id = ")[^"]+(\")', r'\1[REDACTED-MACHINE-ID]\2'),
-            
+
             # Personal names and identifiers
             (r'(Connecting to )([A-Z][a-z]+ [A-Z][a-z]+)(\.\.\.)', r'\1[REDACTED-NAME]\3'),
-            
+
             # Password related info (if present)
             (r'(password=)[^\s,;\'\"]+', r'\1[REDACTED-PASSWORD]'),
             (r'(password="?)[^"\']+("?)', r'\1[REDACTED-PASSWORD]\2'),
             (r'(psk="?)[^"\']+("?)', r'\1[REDACTED-PASSWORD]\2'),
-            
+
             # Specific media/content identifiers
             (r'(media\.name = ")[^"]+(\")', r'\1[REDACTED-MEDIA]\2'),
-            
+
             # Tokens and authentication
             (r'(token=)[^\s]+', r'\1[REDACTED-TOKEN]'),
             (r'(auth[-_]?token=)[^\s]+', r'\1[REDACTED-TOKEN]'),
@@ -141,26 +139,26 @@ class Logger:
     def __del__(self):
         if hasattr(self, '_Logger__log_file') and self.__log_file is not None:
             self.__log_file.close()
-    
+
     def __redact_sensitive_info(self, message: str) -> str:
         """Redacts sensitive information from log messages
-        
+
         Args:
             message (str): The original log message
-            
+
         Returns:
             str: The redacted log message
         """
         # Skip redaction if not enabled
         if not self.__should_redact:
             return message
-            
+
         redacted_message = message
-        
+
         # Apply each redaction pattern
         for pattern, replacement in self.__redaction_patterns:
             redacted_message = re.sub(pattern, replacement, redacted_message, flags=re.IGNORECASE)
-            
+
         return redacted_message
 
     def log(self, log_level: LogLevel, message: str):
@@ -172,7 +170,7 @@ class Logger:
         """
         # Redact sensitive information
         redacted_message = self.__redact_sensitive_info(message)
-        
+
         label = (
             self.__labels[log_level].first
             if self.__add_color
